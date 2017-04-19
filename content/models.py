@@ -23,12 +23,11 @@ class CanVoteMixin(models.Model):
 		:param mark: оценка пользователя
 		:return: True
 		"""
-		content_type = ContentType.objects.get_for_model(type(self))
-		if Rating.objects.filter(user=user, mark=mark, object_id=self.id, content_type=content_type).exists():
-			Rating.objects.get(user=user, mark=mark, object_id=self.id, content_type=content_type).delete()
+		if self.votes.filter(user=user, mark=mark).exists():
+			self.votes.get(user=user, mark=mark).delete()
 		else:
-			if Rating.objects.filter(user=user, object_id=self.id, content_type=content_type).exists():
-				Rating.objects.get(user=user, object_id=self.id, content_type=content_type).delete()
+			if self.votes.filter(user=user).exists():
+				self.votes.get(user=user).delete()
 			Rating.objects.create(user=user, mark=mark, content_object=self)
 		return True
 
@@ -38,8 +37,7 @@ class CanVoteMixin(models.Model):
 
 		:return: положительные голоса
 		"""
-		content_type = ContentType.objects.get_for_model(type(self))
-		pluses_count = Rating.objects.filter(mark=True, object_id=self.id, content_type=content_type).exists()
+		pluses_count = self.votes.filter(mark=True).count()
 		return pluses_count
 
 	@property
@@ -48,8 +46,7 @@ class CanVoteMixin(models.Model):
 
 		:return: отрицательные голоса
 		"""
-		content_type = ContentType.objects.get_for_model(type(self))
-		minuses_count = Rating.objects.filter(mark=False, object_id=self.id, content_type=content_type).exists()
+		minuses_count = self.votes.filter(mark=False).count()
 		return minuses_count
 
 	@property
@@ -58,8 +55,7 @@ class CanVoteMixin(models.Model):
 
 		:return: количество голосов
 		"""
-		content_type = ContentType.objects.get_for_model(type(self))
-		votes_count = Rating.objects.filter(object_id=self.id, content_type=content_type).exists()
+		votes_count = self.votes.count()
 		return votes_count
 
 
@@ -89,7 +85,7 @@ class Comment(MultiRelationModel, CanVoteMixin):
 	"""
 	body = models.TextField(u'Текст комментария')
 	add_date = models.DateTimeField(u'Дата добавления')
-	vote_relation = fields.GenericRelation(Rating, related_query_name='comment_vote')
+	votes = fields.GenericRelation(Rating, related_query_name='comment_vote')
 
 
 class CanCommentMixin(CanVoteMixin):
@@ -131,7 +127,7 @@ class News(ContentObject):
 
 	"""
 	comment_relation = fields.GenericRelation(Comment, related_query_name='news_comment')
-	vote_relation = fields.GenericRelation(Rating, related_query_name='news_vote')
+	votes = fields.GenericRelation(Rating, related_query_name='news_vote')
 
 
 class Article(ContentObject):
@@ -139,4 +135,4 @@ class Article(ContentObject):
 
 	"""
 	comment_relation = fields.GenericRelation(Comment, related_query_name='article_comment')
-	vote_relation = fields.GenericRelation(Rating, related_query_name='article_vote')
+	votes = fields.GenericRelation(Rating, related_query_name='article_vote')
