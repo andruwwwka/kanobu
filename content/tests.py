@@ -4,10 +4,11 @@ import string
 
 import pytest
 from django.contrib.auth.models import User
-from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
-from content.models import News, Article, Comment, Rating
+from comments.models import Comment
+from content.models import News, Article
+from votes.models import Rating
 
 
 @pytest.yield_fixture(scope='module')
@@ -104,7 +105,7 @@ def test_create_news(user):
 	unique_title = ''.join(random.choice(string.lowercase) for _ in range(90))
 	News.objects.create(
 		title=unique_title,
-		body='test'*50,
+		body='test' * 50,
 		date_of_creation=now,
 		date_of_publication=now,
 		author=user
@@ -128,7 +129,8 @@ def test_create_article(user):
 		date_of_publication=now,
 		author=user
 	)
-	assert Article.objects.filter(title=unique_title, author=user, date_of_creation=now, date_of_publication=now).exists()
+	assert Article.objects.filter(title=unique_title, author=user, date_of_creation=now,
+	                              date_of_publication=now).exists()
 
 
 @pytest.mark.django_db
@@ -139,11 +141,11 @@ def test_add_comment_to_news(user, news):
 	:param news: новость (материал)
 	:return: success test (True/False)
 	"""
-	before_test_count = Comment.objects.all().count()
+	before_test_count = news.comments.count()
 	comment_text = ''.join(random.choice(string.lowercase) for _ in range(90)) * 90
 	news.comment(user, comment_text)
 	comment_exists = Comment.objects.filter(user=user, body=comment_text, news_comment=news).exists()
-	assert before_test_count + 1 == Comment.objects.all().count() and comment_exists
+	assert before_test_count + 1 == news.comments.count() and comment_exists
 
 
 @pytest.mark.django_db
@@ -154,11 +156,11 @@ def test_add_comment_to_article(user, article):
 	:param article: статья (материал)
 	:return: success test (True/False)
 	"""
-	before_test_count = Comment.objects.all().count()
+	before_test_count = article.comments.count()
 	comment_text = ''.join(random.choice(string.lowercase) for _ in range(90)) * 90
 	article.comment(user, comment_text)
 	comment_exists = Comment.objects.filter(user=user, body=comment_text, article_comment=article).exists()
-	assert before_test_count + 1 == Comment.objects.all().count() and comment_exists
+	assert before_test_count + 1 == article.comments.count() and comment_exists
 
 
 @pytest.mark.parametrize('vote', [True, False], ids=['plus', 'minus'])
@@ -171,11 +173,10 @@ def test_add_vote_to_article(user, article, vote):
 	:param vote: оценка пользователя
 	:return: success test (True/False)
 	"""
-	before_test_count = Rating.objects.all().count()
+	before_test_count = Rating.objects.count()
 	article.vote(user, vote)
-	content_type = ContentType.objects.get_for_model(type(article))
-	vote_exists = Rating.objects.filter(user=user, mark=vote, object_id=article.id, content_type=content_type).exists()
-	assert before_test_count + 1 == Rating.objects.all().count() and vote_exists
+	vote_exists = article.votes.exists()
+	assert before_test_count + 1 == Rating.objects.count() and vote_exists
 
 
 @pytest.mark.parametrize('vote', [True, False], ids=['plus', 'minus'])
@@ -188,11 +189,10 @@ def test_add_vote_to_news(user, news, vote):
 	:param vote: оценка пользователя
 	:return: success test (True/False)
 	"""
-	before_test_count = Rating.objects.all().count()
+	before_test_count = Rating.objects.count()
 	news.vote(user, vote)
-	content_type = ContentType.objects.get_for_model(type(news))
-	vote_exists = Rating.objects.filter(user=user, mark=vote, object_id=news.id, content_type=content_type).exists()
-	assert before_test_count + 1 == Rating.objects.all().count() and vote_exists
+	vote_exists = news.votes.exists()
+	assert before_test_count + 1 == Rating.objects.count() and vote_exists
 
 
 @pytest.mark.parametrize('vote', [True, False], ids=['plus', 'minus'])
@@ -205,11 +205,10 @@ def test_add_vote_to_comment(user, comment, vote):
 	:param vote: оценка пользователя
 	:return: success test (True/False)
 	"""
-	before_test_count = Rating.objects.all().count()
+	before_test_count = Rating.objects.count()
 	comment.vote(user, vote)
-	content_type = ContentType.objects.get_for_model(type(comment))
-	vote_exists = Rating.objects.filter(user=user, mark=vote, object_id=comment.id, content_type=content_type).exists()
-	assert before_test_count + 1 == Rating.objects.all().count() and vote_exists
+	vote_exists = comment.votes.exists()
+	assert before_test_count + 1 == Rating.objects.count() and vote_exists
 
 
 @pytest.mark.parametrize('vote', [True, False], ids=['plus', 'minus'])
@@ -224,23 +223,12 @@ def test_delete_vote_from_article(users_list, article, vote):
 	"""
 	article.vote(users_list[0], vote)
 	article.vote(users_list[1], not vote)
-	before_delete = Rating.objects.all().count()
-	content_type = ContentType.objects.get_for_model(type(article))
-	vote_exists_before_delete = Rating.objects.filter(
-		user=users_list[0],
-		mark=vote,
-		object_id=article.id,
-		content_type=content_type
-	).exists()
+	before_delete = Rating.objects.count()
+	vote_exists_before_delete = article.votes.filter(user=users_list[0], mark=vote).exists()
 	article.vote(users_list[0], vote)
-	vote_exists_after_delete = Rating.objects.filter(
-		user=users_list[0],
-		mark=vote,
-		object_id=article.id,
-		content_type=content_type
-	).exists()
+	vote_exists_after_delete = article.votes.filter(user=users_list[0], mark=vote).exists()
 	correct_exists_check = not vote_exists_after_delete and vote_exists_before_delete
-	assert Rating.objects.all().count() == before_delete - 1 and correct_exists_check
+	assert Rating.objects.count() == before_delete - 1 and correct_exists_check
 
 
 @pytest.mark.parametrize('vote', [True, False], ids=['plus', 'minus'])
@@ -255,23 +243,12 @@ def test_delete_vote_from_news(users_list, news, vote):
 	"""
 	news.vote(users_list[0], vote)
 	news.vote(users_list[1], not vote)
-	before_delete = Rating.objects.all().count()
-	content_type = ContentType.objects.get_for_model(type(news))
-	vote_exists_before_delete = Rating.objects.filter(
-		user=users_list[0],
-		mark=vote,
-		object_id=news.id,
-		content_type=content_type
-	).exists()
+	before_delete = Rating.objects.count()
+	vote_exists_before_delete = news.votes.filter(user=users_list[0], mark=vote).exists()
 	news.vote(users_list[0], vote)
-	vote_exists_after_delete = Rating.objects.filter(
-		user=users_list[0],
-		mark=vote,
-		object_id=news.id,
-		content_type=content_type
-	).exists()
+	vote_exists_after_delete = news.votes.filter(user=users_list[0], mark=vote).exists()
 	correct_exists_check = not vote_exists_after_delete and vote_exists_before_delete
-	assert Rating.objects.all().count() == before_delete - 1 and correct_exists_check
+	assert Rating.objects.count() == before_delete - 1 and correct_exists_check
 
 
 @pytest.mark.parametrize('vote', [True, False], ids=['plus', 'minus'])
@@ -286,23 +263,12 @@ def test_delete_vote_from_comment(users_list, comment, vote):
 	"""
 	comment.vote(users_list[0], vote)
 	comment.vote(users_list[1], not vote)
-	before_delete = Rating.objects.all().count()
-	content_type = ContentType.objects.get_for_model(type(comment))
-	vote_exists_before_delete = Rating.objects.filter(
-		user=users_list[0],
-		mark=vote,
-		object_id=comment.id,
-		content_type=content_type
-	).exists()
+	before_delete = Rating.objects.count()
+	vote_exists_before_delete = comment.votes.filter(user=users_list[0], mark=vote).exists()
 	comment.vote(users_list[0], vote)
-	vote_exists_after_delete = Rating.objects.filter(
-		user=users_list[0],
-		mark=vote,
-		object_id=comment.id,
-		content_type=content_type
-	).exists()
+	vote_exists_after_delete = comment.votes.filter(user=users_list[0], mark=vote).exists()
 	correct_exists_check = not vote_exists_after_delete and vote_exists_before_delete
-	assert Rating.objects.all().count() == before_delete - 1 and correct_exists_check
+	assert Rating.objects.count() == before_delete - 1 and correct_exists_check
 
 
 @pytest.mark.parametrize(('vote', 'expected_count'), [(True, 2), (False, 2), (None, 3)], ids=['plus', 'minus', 'all'])
@@ -316,11 +282,7 @@ def test_eval_count_votes_of_article(users_list, article, vote, expected_count):
 	:param expected_count: ожидаемое количество голосов
 	:return: success test (True/False)
 	"""
-	content_type = ContentType.objects.get_for_model(type(article))
-	filter_params = {
-		'object_id': article.id,
-		'content_type': content_type
-	}
+	filter_params = dict()
 	if vote is not None:
 		filter_params.update({'mark': vote})
 	else:
@@ -328,7 +290,7 @@ def test_eval_count_votes_of_article(users_list, article, vote, expected_count):
 	article.vote(users_list[0], vote)
 	article.vote(users_list[1], not vote)
 	article.vote(users_list[2], vote)
-	assert Rating.objects.filter(**filter_params).count() == expected_count
+	assert article.votes.filter(**filter_params).count() == expected_count
 
 
 @pytest.mark.parametrize(('vote', 'expected_count'), [(True, 2), (False, 2), (None, 3)], ids=['plus', 'minus', 'all'])
@@ -342,11 +304,7 @@ def test_eval_count_votes_of_news(users_list, news, vote, expected_count):
 	:param expected_count: ожидаемое количество голосов
 	:return: success test (True/False)
 	"""
-	content_type = ContentType.objects.get_for_model(type(news))
-	filter_params = {
-		'object_id': news.id,
-		'content_type': content_type
-	}
+	filter_params = dict()
 	if vote is not None:
 		filter_params.update({'mark': vote})
 	else:
@@ -354,7 +312,7 @@ def test_eval_count_votes_of_news(users_list, news, vote, expected_count):
 	news.vote(users_list[0], vote)
 	news.vote(users_list[1], not vote)
 	news.vote(users_list[2], vote)
-	assert Rating.objects.filter(**filter_params).count() == expected_count
+	assert news.votes.filter(**filter_params).count() == expected_count
 
 
 @pytest.mark.parametrize(('vote', 'expected_count'), [(True, 2), (False, 2), (None, 3)], ids=['plus', 'minus', 'all'])
@@ -368,11 +326,7 @@ def test_eval_count_votes_of_comment(users_list, comment, vote, expected_count):
 	:param expected_count: ожидаемое количество голосов
 	:return: success test (True/False)
 	"""
-	content_type = ContentType.objects.get_for_model(type(comment))
-	filter_params = {
-		'object_id': comment.id,
-		'content_type': content_type
-	}
+	filter_params = dict()
 	if vote is not None:
 		filter_params.update({'mark': vote})
 	else:
@@ -380,4 +334,4 @@ def test_eval_count_votes_of_comment(users_list, comment, vote, expected_count):
 	comment.vote(users_list[0], vote)
 	comment.vote(users_list[1], not vote)
 	comment.vote(users_list[2], vote)
-	assert Rating.objects.filter(**filter_params).count() == expected_count
+	assert comment.votes.filter(**filter_params).count() == expected_count
